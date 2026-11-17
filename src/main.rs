@@ -622,7 +622,17 @@ struct DevArgs {
     #[arg(long)]
     https: bool,
 
-    /// Additional cargo arguments
+    /// Stability window before rebuilding, in milliseconds
+    /// (default: 400, or `debounce_ms` in [package.metadata.armature.dev.watcher])
+    #[arg(long, value_name = "MS")]
+    debounce_ms: Option<u64>,
+
+    /// Use the built-in watcher even when cargo-watch is installed
+    #[arg(long)]
+    no_cargo_watch: bool,
+
+    /// Arguments for `cargo build`; arguments after a second `--` are passed to
+    /// the application (e.g. `armature dev -- --release -- --config dev.toml`)
     #[arg(last = true)]
     cargo_args: Vec<String>,
 }
@@ -2129,7 +2139,17 @@ async fn main() {
             GeneratorType::Health => generate::health_controller().await,
         },
 
-        Commands::Dev(args) => dev::run(args.port, &args.host, &args.cargo_args).await,
+        Commands::Dev(args) => {
+            dev::run(dev::DevOptions {
+                port: args.port,
+                host: args.host,
+                cargo_args: args.cargo_args,
+                verbose: cli.verbose,
+                debounce_ms: args.debounce_ms,
+                use_cargo_watch: !args.no_cargo_watch,
+            })
+            .await
+        }
 
         Commands::Serve(_) => Err(CliError::Unimplemented("serve".to_string())),
 
