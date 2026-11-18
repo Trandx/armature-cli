@@ -26,16 +26,72 @@ cd my-app
 
 ### Generate Code
 
+`armature generate` (`armature g`) follows the NestJS CLI: the name carries
+the path, each element gets its own directory, tests go next to it, and the
+element is declared and registered in the nearest module.
+
 ```bash
-# Generate a controller
-armature generate controller users
-
-# Generate a model
-armature generate model user
-
-# Generate a full CRUD scaffold with fields
-armature generate scaffold post --fields "title:string,body:text,published:bool"
+armature g resource modules/products --crud   # module + controller + service + tests
+armature g controller modules/products/admin  # registered in ProductsModule
+armature g service users                      # src/users/users_service.rs
+armature g guard common/auth --dry-run        # show what would change
 ```
+
+```text
+src/modules/products/
+├── mod.rs                       # ProductsModule (controllers, providers), tests
+├── products_controller.rs       # ProductsController → /products
+├── products_service.rs          # ProductsService, injected into the controller
+└── tests/
+    ├── products_controller_test.rs
+    └── products_service_test.rs
+```
+
+Rules:
+
+- **Path and name**: `modules/products` → directory `src/modules/products/`,
+  files `products_<kind>.rs`. Every directory becomes a Rust module: the
+  generator adds `pub mod …;` to each parent and `mod modules;` to `main.rs`.
+- **`--flat`**: no directory for the element (`src/modules/products_service.rs`).
+- **Tests**: `tests/<file>_test.rs`, declared in a `#[cfg(test)] mod tests`
+  block of the directory's module, so `cargo test` runs them. `--no-spec`
+  (`--skip-tests`) skips them.
+- **Registration**: controllers go to `controllers: [...]` and services /
+  providers / repositories to `providers: [...]` of the nearest
+  `#[module(...)]` (the element's directory, then each parent up to
+  `AppModule`); a new module goes to the `imports` of its parent module.
+  `--skip-import` disables it.
+- **`--dry-run` (`-d`)**: print the `CREATE`/`UPDATE` list, write nothing.
+  Nothing is written either when one of the files already exists.
+- **Dependencies**: when the generated code needs an armature feature or a
+  crate (`auth` for guards, `validator` for pipes and DTOs, `async-graphql`,
+  `armature-queue`, …), it is added to `Cargo.toml`.
+
+| NestJS | `armature g …` | Generated |
+|---|---|---|
+| `application` | `application` | new project (`armature new`) |
+| `class` (`cl`) | `class` | `<name>.rs` — plain struct |
+| `configuration` (`config`) | `config` | `<name>_config.rs` |
+| `controller` (`co`) | `controller` (`co`, `c`) | `<name>_controller.rs` |
+| `decorator` (`d`) | `decorator` | `<name>_decorator.rs` — request extractor (`FromRequest`) |
+| `filter` (`f`) | `filter` | `<name>_filter.rs` — `ExceptionFilter` |
+| `gateway` (`ga`) | `gateway` | `<name>_gateway.rs` — WebSocket handler |
+| `guard` (`gu`) | `guard` | `<name>_guard.rs` (`--guard-type auth\|role\|permission\|api-key\|rate-limit`) |
+| `interceptor` (`itc`) | `interceptor` | `<name>_interceptor.rs` |
+| `interface` (`itf`) | `interface` | `<name>_interface.rs` — trait |
+| `library` (`lib`) | `library` | `libs/<name>/` crate, workspace member + dependency |
+| `middleware` (`mi`) | `middleware` | `<name>_middleware.rs` |
+| `module` (`mo`) | `module` | `<dir>/mod.rs` with `#[module(...)]` |
+| `pipe` (`pi`) | `pipe` | `<name>_pipe.rs` — parse + validate a body |
+| `provider` (`pr`) | `provider` | `<name>_provider.rs` — `#[injectable]` |
+| `resolver` (`r`) | `resolver` | `<name>_resolver.rs` — GraphQL |
+| `resource` (`res`) | `resource` | module + controller + service + tests |
+| `service` (`s`) | `service` | `<name>_service.rs` |
+| `sub-app` (`app`) | `sub-app` | `apps/<name>/` application, workspace member |
+
+Armature also has `model`, `dto`, `entity`, `repository`, `scaffold`, `job`,
+`event`, `scheduler`, `cache-service`, `api-client`, `health` and the
+`prax-*` generators, with the same path rules.
 
 ### Development Server
 
